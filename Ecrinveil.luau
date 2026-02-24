@@ -1440,6 +1440,7 @@ function Tab:AddSlider(id, opts)
         BackgroundColor3 = C.fill, BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 1,
     }, sec)
     crn(row, 10); pad(row, 10, 14, 10, 14)
+    registerThemeFrame(row, "fill")
 
     local tL = lbl({
         Size = UDim2.new(0.7, -4, 0, 20), Position = UDim2.new(0, 0, 0, 0),
@@ -1447,6 +1448,7 @@ function Tab:AddSlider(id, opts)
         TextSize = SZ.subhead, Font = F.regular, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15,
     }, row)
     trackLabel(tL, opts.Title)
+    registerThemeFrame(tL, "l1")
 
     local vLbl = lbl({
         Size = UDim2.new(0.3, -4, 0, 20), Position = UDim2.new(0.7, 4, 0, 0),
@@ -1549,6 +1551,7 @@ function Tab:AddInput(id, opts)
         BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 1,
     }, sec)
     crn(row, 10); pad(row, 8, 14, 8, 14)
+    registerThemeFrame(row, "fill")
 
     local tL = lbl({
         Size = UDim2.new(1, 0, 0, 15), Text = resolveText(opts.Title or "Input"),
@@ -1556,6 +1559,7 @@ function Tab:AddInput(id, opts)
         TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15,
     }, row)
     trackLabel(tL, opts.Title)
+    registerThemeFrame(tL, "l2")
 
     local box = inst("TextBox", {
         Size = UDim2.new(1, 0, 0, 22), Position = UDim2.new(0, 0, 0, 20),
@@ -1566,6 +1570,7 @@ function Tab:AddInput(id, opts)
         TextXAlignment = Enum.TextXAlignment.Left,
         ZIndex = 15, ClearTextOnFocus = false, ClipsDescendants = false,
     }, row)
+    registerThemeCallback(function() box.TextColor3 = C.l1 end)
 
     if opts.Numeric then
         box:GetPropertyChangedSignal("Text"):Connect(function()
@@ -1921,82 +1926,78 @@ function Tab:AddProgressBar(opts)
 end
 
 -- PlayerTable
+-- Renders as a dropdown-style row. Clicking opens a panel with search + avatar list.
+-- Local player is always included. Supports double-click detection.
 function Tab:AddPlayerTable(opts)
     opts = opts or {}
     local cont     = getContainer(self); local order = #self._elements + 1
     local cb       = opts.OnSelect or function() end
     local selected = nil
-    local MAX = opts.MaxVisible or 5; local IH = 46; local SH = 36
+    local MAX = opts.MaxVisible or 6; local IH = 46
+    local panel = nil; local closing = false
 
     local sec = secFrame(cont, order)
+    local row = rowFrame(sec, 1); crn(row, 10); pad(row, 0, 14, 0, 14)
+    registerThemeFrame(row, "fill")
 
-    if opts.Title then
-        local th = frm({ Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.fill,
-            BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 0 }, sec)
-        local ptL = lbl({ Size = UDim2.new(1, -24, 1, 0), Position = UDim2.new(0, 12, 0, 0),
-            Text = resolveText(opts.Title), TextColor3 = C.l1,
-            TextSize = SZ.subhead, Font = F.semibold,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, th)
-        trackLabel(ptL, opts.Title)
-        frm({ Size = UDim2.new(1, 0, 0, 0.5), Position = UDim2.new(0, 0, 1, -0.5),
-            BackgroundColor3 = C.separator, BackgroundTransparency = 0, ZIndex = 15 }, th)
+    local titleLbl = lbl({ Size = UDim2.new(0.55, 0, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+        Text = resolveText(opts.Title or "Select Player"), TextColor3 = C.l1,
+        TextSize = SZ.subhead, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, row)
+    trackLabel(titleLbl, opts.Title)
+
+    local vLbl = lbl({ Size = UDim2.new(0.4, -24, 1, 0), Position = UDim2.new(0.6, 0, 0, 0),
+        Text = "—", TextColor3 = C.l2, TextSize = SZ.caption1, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Right, ClipsDescendants = true, ZIndex = 15 }, row)
+    registerThemeFrame(vLbl, "l2")
+
+    local arrow = lbl({ Size = UDim2.new(0, 14, 1, 0), Position = UDim2.new(1, -14, 0, 0),
+        Text = "v", TextColor3 = C.l3, TextSize = 12, Font = F.bold, ZIndex = 15 }, row)
+
+    local function closePanel()
+        if not panel or closing then return end
+        closing = true
+        tw(arrow, eOut(0.15), { Rotation = 0 })
+        tw(panel, eIn(0.18), { Size = UDim2.new(1, 0, 0, 0) })
+        local p = panel; panel = nil
+        task.delay(0.19, function()
+            closing = false
+            if p and p.Parent then p:Destroy() end
+        end)
     end
 
-    local sw = frm({ Size = UDim2.new(1, 0, 0, SH), BackgroundColor3 = C.fill,
-        BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 1 }, sec)
-    pad(sw, 4, 10, 4, 10)
-    local si = frm({ Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.fillSecond,
-        BackgroundTransparency = 0, ZIndex = 15 }, sw); crn(si, 7); pad(si, 0, 8, 0, 8)
-    lbl({ Size = UDim2.new(0, 14, 1, 0), Text = "?", TextColor3 = C.l3,
-        TextSize = 12, Font = F.bold, ZIndex = 16 }, si)
-    local sbox = inst("TextBox", {
-        Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 18, 0, 0),
-        BackgroundTransparency = 1, BorderSizePixel = 0,
-        PlaceholderText = T("player_search"), PlaceholderColor3 = C.l3,
-        Text = "", TextColor3 = C.l1, TextSize = SZ.footnote, Font = F.regular,
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16, ClearTextOnFocus = false,
-    }, si)
-    frm({ Size = UDim2.new(1, 0, 0, 0.5), Position = UDim2.new(0, 0, 1, -0.5),
-        BackgroundColor3 = C.separator, BackgroundTransparency = 0, ZIndex = 15 }, sw)
-
-    local ls = inst("ScrollingFrame", {
-        Size = UDim2.new(1, 0, 0, MAX * IH),
-        Position = UDim2.new(0, 0, 0, (opts.Title and 34 or 0) + SH),
-        BackgroundTransparency = 1, BorderSizePixel = 0,
-        ScrollBarThickness = 2, ScrollBarImageColor3 = C.separator,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 14,
-    }, sec)
-    ll(ls, Enum.FillDirection.Vertical, 0)
-
-    local showSelf = opts.ShowSelf ~= false
-    local function buildList(filter)
+    local function buildList(ls, sbox)
+        local filter = sbox and sbox.Text or ""
         for _, c in ipairs(ls:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
         local list = {}
         for _, p in ipairs(Players:GetPlayers()) do
-            if showSelf or p ~= plr then
-                local n = p.Name
-                if filter == "" or n:lower():find(filter:lower(), 1, true) then
-                    table.insert(list, p)
-                end
+            local n = p.Name
+            if filter == "" or n:lower():find(filter:lower(), 1, true) then
+                table.insert(list, p)
             end
         end
-        table.sort(list, function(a, b) return a.Name < b.Name end)
+        table.sort(list, function(a, b)
+            if a == plr then return true end
+            if b == plr then return false end
+            return a.Name < b.Name
+        end)
         for i, p in ipairs(list) do
-            local isSel = selected == p.Name
-            local item  = frm({
+            local isSelf = p == plr
+            local isSel  = selected == p.Name
+            local item = frm({
                 Size = UDim2.new(1, 0, 0, IH), LayoutOrder = i,
-                BackgroundColor3 = isSel and C.blue:Lerp(C.fill, 0.78) or C.fill,
-                BackgroundTransparency = 0, ZIndex = 15,
+                BackgroundColor3 = isSel and C.blue:Lerp(C.bgElevated, 0.65) or C.bgElevated,
+                BackgroundTransparency = 0, ZIndex = 20,
             }, ls)
-            local AV = IH - 8
-            local avatarBg = frm({ Size = UDim2.new(0, AV, 0, AV), Position = UDim2.new(0, 6, 0.5, -(AV/2)),
-                BackgroundColor3 = C.fillSecond, BackgroundTransparency = 0, ZIndex = 16 }, item)
+            local AV = IH - 10
+            local avatarBg = frm({ Size = UDim2.new(0, AV, 0, AV),
+                Position = UDim2.new(0, 8, 0.5, -(AV/2)),
+                BackgroundColor3 = C.fill, BackgroundTransparency = 0, ZIndex = 21 }, item)
             crn(avatarBg, AV / 2)
             local avatarImg = inst("ImageLabel", { Size = UDim2.new(1, 0, 1, 0),
-                BackgroundTransparency = 1, Image = "", ZIndex = 17 }, avatarBg)
+                BackgroundTransparency = 1, Image = "", ZIndex = 22 }, avatarBg)
             crn(avatarImg, AV / 2)
             task.spawn(function()
                 local ok, url = pcall(function()
@@ -2005,47 +2006,99 @@ function Tab:AddPlayerTable(opts)
                 end)
                 if ok and avatarImg and avatarImg.Parent then avatarImg.Image = url end
             end)
-            local nameOffX = AV + 10
+            local nameOffX = AV + 14
+            local nameText = isSelf and (p.Name .. " (you)") or p.Name
             lbl({ Size = UDim2.new(1, -(nameOffX + 26), 1, 0), Position = UDim2.new(0, nameOffX, 0, 0),
-                Text = p.Name, TextColor3 = isSel and C.l1 or C.l2,
-                TextSize = SZ.subhead, Font = isSel and F.medium or F.regular,
-                TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16 }, item)
-            lbl({ Size = UDim2.new(0, 18, 1, 0), Position = UDim2.new(1, -22, 0, 0),
-                Text = tostring(i), TextColor3 = C.l3, TextSize = SZ.caption2, Font = F.regular,
-                TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 16 }, item)
-            if i < #list then
-                frm({ Size = UDim2.new(1, -22, 0, 0.5), Position = UDim2.new(0, 11, 1, -0.5),
-                    BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 16 }, item)
+                Text = nameText, TextColor3 = isSel and C.l1 or (isSelf and C.blue or C.l2),
+                TextSize = SZ.subhead, Font = (isSel or isSelf) and F.medium or F.regular,
+                TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21 }, item)
+            if isSel then
+                lbl({ Size = UDim2.new(0, 18, 1, 0), Position = UDim2.new(1, -22, 0, 0),
+                    Text = "v", TextColor3 = C.blue, TextSize = 12, Font = F.bold, ZIndex = 21 }, item)
+            end
+            if i > 1 then
+                frm({ Size = UDim2.new(1, -22, 0, 0.5), Position = UDim2.new(0, 11, 0, 0),
+                    BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 21 }, item)
             end
             local pc = p.Name; local lt = 0
-            btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 17 }, item).MouseButton1Click:Connect(function()
-                local now = tick()
-                local isDouble = (now - lt) < 0.36
-                lt = now; selected = pc; buildList(sbox.Text)
-                cb(pc, isDouble)
+            btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 22 }, item).MouseButton1Click:Connect(function()
+                local now = tick(); local isDouble = (now - lt) < 0.36; lt = now
+                selected = pc; vLbl.Text = pc
+                buildList(ls, sbox); cb(pc, isDouble)
             end)
             local capturedSel = isSel
-            press(item,
-                function() return capturedSel and C.blue:Lerp(C.fill, 0.78) or C.fill end,
-                "fillSecond", nil)
+            press(item, function() return capturedSel and C.blue:Lerp(C.bgElevated, 0.65) or C.bgElevated end, "fillSecond", nil)
         end
         ls.CanvasSize = UDim2.new(0, 0, 0, #list * IH)
-        ls.Size       = UDim2.new(1, 0, 0, math.min(#list, MAX) * IH)
+        local visH = math.min(#list, MAX) * IH
+        ls.Size = UDim2.new(1, -22, 0, visH)
+        if panel then
+            local SH = 36
+            tw(panel, eOut(0.12), { Size = UDim2.new(1, 0, 0, SH + visH + 8) })
+        end
     end
 
-    buildList("")
-    sbox:GetPropertyChangedSignal("Text"):Connect(function() buildList(sbox.Text) end)
-    Players.PlayerAdded:Connect(function()    buildList(sbox.Text) end)
-    Players.PlayerRemoving:Connect(function() buildList(sbox.Text) end)
+    local function openPanel()
+        if panel or closing then return end
+        tw(arrow, eOut(0.15), { Rotation = 180 })
+        local SH = 36
+        local initH = SH + math.min(#Players:GetPlayers(), MAX) * IH + 8
+        panel = frm({ Size = UDim2.new(1, 0, 0, 0), Position = UDim2.new(0, 0, 0, ROW_H),
+            BackgroundColor3 = C.bgElevated, BackgroundTransparency = 0,
+            ClipsDescendants = true, ZIndex = 18, LayoutOrder = 2 }, sec)
+        crn(panel, 10); registerThemeFrame(panel, "bgElevated")
+
+        -- Search bar inside panel
+        local sw = frm({ Size = UDim2.new(1, -22, 0, SH - 6), Position = UDim2.new(0, 11, 0, 4),
+            BackgroundColor3 = C.fill, BackgroundTransparency = 0, ZIndex = 19 }, panel)
+        crn(sw, 7); pad(sw, 0, 8, 0, 8); registerThemeFrame(sw, "fill")
+        lbl({ Size = UDim2.new(0, 14, 1, 0), Text = "?", TextColor3 = C.l3,
+            TextSize = 12, Font = F.bold, ZIndex = 20 }, sw)
+        local sbox = inst("TextBox", {
+            Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 18, 0, 0),
+            BackgroundTransparency = 1, BorderSizePixel = 0,
+            PlaceholderText = T("player_search"), PlaceholderColor3 = C.l3,
+            Text = "", TextColor3 = C.l1, TextSize = SZ.footnote, Font = F.regular,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 20, ClearTextOnFocus = false,
+        }, sw)
+
+        local ls = inst("ScrollingFrame", {
+            Size = UDim2.new(1, -22, 0, 0), Position = UDim2.new(0, 11, 0, SH + 2),
+            BackgroundTransparency = 1, BorderSizePixel = 0,
+            ScrollBarThickness = 2, ScrollBarImageColor3 = C.separator,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
+            CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 19,
+        }, panel)
+        ll(ls, Enum.FillDirection.Vertical, 0)
+
+        buildList(ls, sbox)
+        sbox:GetPropertyChangedSignal("Text"):Connect(function() buildList(ls, sbox) end)
+        tw(panel, spr(0.35), { Size = UDim2.new(1, 0, 0, initH) })
+
+        -- Auto-refresh when players join/leave while panel is open
+        local pa = Players.PlayerAdded:Connect(function()
+            if panel then buildList(ls, sbox) end
+        end)
+        local pr = Players.PlayerRemoving:Connect(function()
+            if panel then task.defer(function() buildList(ls, sbox) end) end
+        end)
+        task.delay(60, function() pa:Disconnect(); pr:Disconnect() end)
+    end
+
+    btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 16 }, row).MouseButton1Click:Connect(function()
+        if panel then closePanel() else openPanel() end
+    end)
 
     local elem = { type = "playertable", frame = sec }
     function elem:GetSelected() return selected end
-    function elem:Refresh() buildList(sbox.Text) end
+    function elem:Refresh() if panel then end end
     applyCommonMethods(elem)
     table.insert(self._elements, elem); return elem
 end
 
 -- Table
+-- Rendered as a dropdown-style row. Panel opens below, contains optional search
+-- bar + scrollable list with single or multi-select.
 function Tab:AddTable(opts)
     opts = opts or {}
     local cont  = getContainer(self); local order = #self._elements + 1
@@ -2053,106 +2106,152 @@ function Tab:AddTable(opts)
     local cb    = opts.OnSelect or function() end
     local multi = opts.Multi == true
     local selected = multi and {} or nil
-    local MAX = opts.MaxVisible or 5; local IH = 38; local SH = 36
+    local MAX = opts.MaxVisible or 6; local IH = 38
+    local panel = nil; local closing = false
 
     local sec = secFrame(cont, order)
+    local row = rowFrame(sec, 1); crn(row, 10); pad(row, 0, 14, 0, 14)
+    registerThemeFrame(row, "fill")
 
-    if opts.Title then
-        local th = frm({ Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.fill,
-            BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 0 }, sec)
-        local tL2 = lbl({ Size = UDim2.new(1, -24, 1, 0), Position = UDim2.new(0, 12, 0, 0),
-            Text = resolveText(opts.Title), TextColor3 = C.l1,
-            TextSize = SZ.subhead, Font = F.semibold,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, th)
-        trackLabel(tL2, opts.Title)
-        frm({ Size = UDim2.new(1, 0, 0, 0.5), Position = UDim2.new(0, 0, 1, -0.5),
-            BackgroundColor3 = C.separator, BackgroundTransparency = 0, ZIndex = 15 }, th)
+    local titleLbl = lbl({ Size = UDim2.new(0.55, 0, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+        Text = resolveText(opts.Title or "Select"), TextColor3 = C.l1,
+        TextSize = SZ.subhead, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, row)
+    trackLabel(titleLbl, opts.Title)
+
+    local function dispSel()
+        if multi then
+            local arr = {}
+            for v, s in pairs(selected) do if s then table.insert(arr, v) end end
+            return #arr == 0 and T("select_placeholder") or table.concat(arr, ", ")
+        else
+            return selected or T("select_placeholder")
+        end
     end
 
-    local sbox2 = nil
-    if opts.Searchable then
-        local sw2 = frm({ Size = UDim2.new(1, 0, 0, SH), BackgroundColor3 = C.fill,
-            BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 1 }, sec)
-        pad(sw2, 4, 10, 4, 10)
-        local si2 = frm({ Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = C.fillSecond,
-            BackgroundTransparency = 0, ZIndex = 15 }, sw2); crn(si2, 7); pad(si2, 0, 8, 0, 8)
-        lbl({ Size = UDim2.new(0, 14, 1, 0), Text = "?", TextColor3 = C.l3,
-            TextSize = 12, Font = F.bold, ZIndex = 16 }, si2)
-        sbox2 = inst("TextBox", {
-            Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 18, 0, 0),
-            BackgroundTransparency = 1, BorderSizePixel = 0,
-            PlaceholderText = T("search_placeholder"), PlaceholderColor3 = C.l3,
-            Text = "", TextColor3 = C.l1, TextSize = SZ.footnote, Font = F.regular,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16, ClearTextOnFocus = false,
-        }, si2)
+    local vLbl = lbl({ Size = UDim2.new(0.4, -24, 1, 0), Position = UDim2.new(0.6, 0, 0, 0),
+        Text = dispSel(), TextColor3 = C.l2, TextSize = SZ.caption1, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Right, ClipsDescendants = true, ZIndex = 15 }, row)
+    registerThemeFrame(vLbl, "l2")
+
+    local arrow = lbl({ Size = UDim2.new(0, 14, 1, 0), Position = UDim2.new(1, -14, 0, 0),
+        Text = "v", TextColor3 = C.l3, TextSize = 12, Font = F.bold, ZIndex = 15 }, row)
+
+    local currentSbox = nil
+
+    local function closePanel()
+        if not panel or closing then return end
+        closing = true
+        tw(arrow, eOut(0.15), { Rotation = 0 })
+        tw(panel, eIn(0.18), { Size = UDim2.new(1, 0, 0, 0) })
+        local p = panel; panel = nil; currentSbox = nil
+        task.delay(0.19, function()
+            closing = false
+            if p and p.Parent then p:Destroy() end
+        end)
     end
 
-    local ls2 = inst("ScrollingFrame", {
-        Size = UDim2.new(1, 0, 0, math.min(#items, MAX) * IH),
-        Position = UDim2.new(0, 0, 0, (opts.Title and 34 or 0) + (opts.Searchable and SH or 0)),
-        BackgroundTransparency = 1, BorderSizePixel = 0,
-        ScrollBarThickness = 2, ScrollBarImageColor3 = C.separator,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 14,
-    }, sec)
-    ll(ls2, Enum.FillDirection.Vertical, 0)
-
-    local function getCurrentFilter()
-        return (sbox2 and sbox2.Parent) and sbox2.Text or ""
-    end
-
-    -- isSel is computed fresh each buildTable call, no stale closure.
-    local function buildTable(filter)
-        for _, c in ipairs(ls2:GetChildren()) do
+    local function buildList(ls, sbox)
+        local filter = sbox and sbox.Text or ""
+        for _, c in ipairs(ls:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
         end
         local shown = 0
         for _, item in ipairs(items) do
             local label = type(item) == "table" and (item.Label or item[1]) or tostring(item)
-            if not filter or filter == "" or label:lower():find(filter:lower(), 1, true) then
+            if filter == "" or label:lower():find(filter:lower(), 1, true) then
                 shown = shown + 1
                 local isSel = multi and (selected[label] == true) or (selected == label)
-                local row2  = frm({
+                local row2 = frm({
                     Size = UDim2.new(1, 0, 0, IH), LayoutOrder = shown,
-                    BackgroundColor3 = isSel and C.blue:Lerp(C.fill, 0.78) or C.fill,
-                    BackgroundTransparency = 0, ZIndex = 15,
-                }, ls2)
+                    BackgroundColor3 = isSel and C.blue:Lerp(C.bgElevated, 0.65) or C.bgElevated,
+                    BackgroundTransparency = 0, ZIndex = 20,
+                }, ls)
                 lbl({ Size = UDim2.new(1, -36, 1, 0), Position = UDim2.new(0, 12, 0, 0),
                     Text = label, TextColor3 = isSel and C.l1 or C.l2,
                     TextSize = SZ.subhead, Font = isSel and F.medium or F.regular,
-                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16 }, row2)
+                    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21 }, row2)
                 if isSel then
                     lbl({ Size = UDim2.new(0, 18, 1, 0), Position = UDim2.new(1, -22, 0, 0),
-                        Text = "v", TextColor3 = C.blue, TextSize = 12, Font = F.bold, ZIndex = 16 }, row2)
+                        Text = "v", TextColor3 = C.blue, TextSize = 12, Font = F.bold, ZIndex = 21 }, row2)
                 end
                 if shown > 1 then
                     frm({ Size = UDim2.new(1, -22, 0, 0.5), Position = UDim2.new(0, 11, 0, 0),
-                        BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 16 }, row2)
+                        BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 21 }, row2)
                 end
                 local vc = label
-                btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 17 }, row2).MouseButton1Click:Connect(function()
+                btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 22 }, row2).MouseButton1Click:Connect(function()
                     if multi then selected[vc] = not selected[vc] else selected = vc end
-                    cb(selected); buildTable(getCurrentFilter())
+                    vLbl.Text = dispSel(); cb(selected)
+                    if multi then buildList(ls, sbox) else closePanel() end
                 end)
-                -- capturedSel is fresh per loop iteration.
                 local capturedSel = isSel
-                press(row2,
-                    function() return capturedSel and C.blue:Lerp(C.fill, 0.78) or C.fill end,
-                    "fillSecond", nil)
+                press(row2, function() return capturedSel and C.blue:Lerp(C.bgElevated, 0.65) or C.bgElevated end, "fillSecond", nil)
             end
         end
-        ls2.CanvasSize = UDim2.new(0, 0, 0, shown * IH)
-        ls2.Size       = UDim2.new(1, 0, 0, math.min(shown, MAX) * IH)
+        ls.CanvasSize = UDim2.new(0, 0, 0, shown * IH)
+        local visH = math.min(shown, MAX) * IH
+        ls.Size = UDim2.new(1, -22, 0, visH)
+        if panel then
+            local SH = opts.Searchable and 36 or 0
+            tw(panel, eOut(0.12), { Size = UDim2.new(1, 0, 0, SH + visH + 8) })
+        end
     end
-    buildTable("")
 
-    if sbox2 then
-        sbox2:GetPropertyChangedSignal("Text"):Connect(function() buildTable(sbox2.Text) end)
+    local function openPanel()
+        if panel or closing then return end
+        tw(arrow, eOut(0.15), { Rotation = 180 })
+        local SH = opts.Searchable and 36 or 0
+        local initH = SH + math.min(#items, MAX) * IH + 8
+        panel = frm({ Size = UDim2.new(1, 0, 0, 0), Position = UDim2.new(0, 0, 0, ROW_H),
+            BackgroundColor3 = C.bgElevated, BackgroundTransparency = 0,
+            ClipsDescendants = true, ZIndex = 18, LayoutOrder = 2 }, sec)
+        crn(panel, 10); registerThemeFrame(panel, "bgElevated")
+
+        local sbox = nil
+        if opts.Searchable then
+            local sw = frm({ Size = UDim2.new(1, -22, 0, SH - 6), Position = UDim2.new(0, 11, 0, 4),
+                BackgroundColor3 = C.fill, BackgroundTransparency = 0, ZIndex = 19 }, panel)
+            crn(sw, 7); pad(sw, 0, 8, 0, 8); registerThemeFrame(sw, "fill")
+            lbl({ Size = UDim2.new(0, 14, 1, 0), Text = "?", TextColor3 = C.l3,
+                TextSize = 12, Font = F.bold, ZIndex = 20 }, sw)
+            sbox = inst("TextBox", {
+                Size = UDim2.new(1, -18, 1, 0), Position = UDim2.new(0, 18, 0, 0),
+                BackgroundTransparency = 1, BorderSizePixel = 0,
+                PlaceholderText = T("search_placeholder"), PlaceholderColor3 = C.l3,
+                Text = "", TextColor3 = C.l1, TextSize = SZ.footnote, Font = F.regular,
+                TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 20, ClearTextOnFocus = false,
+            }, sw)
+            currentSbox = sbox
+        end
+
+        local ls = inst("ScrollingFrame", {
+            Size = UDim2.new(1, -22, 0, 0), Position = UDim2.new(0, 11, 0, (SH > 0 and SH + 2 or 4)),
+            BackgroundTransparency = 1, BorderSizePixel = 0,
+            ScrollBarThickness = 2, ScrollBarImageColor3 = C.separator,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
+            CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 19,
+        }, panel)
+        ll(ls, Enum.FillDirection.Vertical, 0)
+
+        buildList(ls, sbox)
+        if sbox then
+            sbox:GetPropertyChangedSignal("Text"):Connect(function() buildList(ls, sbox) end)
+        end
+        tw(panel, spr(0.35), { Size = UDim2.new(1, 0, 0, initH) })
     end
+
+    btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 16 }, row).MouseButton1Click:Connect(function()
+        if panel then closePanel() else openPanel() end
+    end)
 
     local elem = { type = "table", frame = sec, Value = selected }
     function elem:GetSelected() return selected end
-    function elem:SetItems(newItems) items = newItems; buildTable(getCurrentFilter()); self.Value = selected end
+    function elem:SetItems(newItems)
+        items = newItems
+        if panel then closePanel() end
+        vLbl.Text = dispSel(); self.Value = selected
+    end
     applyCommonMethods(elem)
     table.insert(self._elements, elem); return elem
 end
@@ -2482,86 +2581,103 @@ function Tab:AddAccordion(opts)
 end
 
 -- ThemePicker
+-- Rendered as a dropdown row so it matches the rest of the settings UI.
+-- No color swatches — name only, check mark on active row.
 function Tab:AddThemePicker(opts)
     opts = opts or {}
-    local cont   = getContainer(self); local order = #self._elements + 1
-    local themes = EcrinVeil:GetThemes()
-
-    local DISPLAY = {
-        dark="Dark", midnight="Midnight", slate="Slate", ocean="Ocean", ember="Ember",
-    }
+    local cont    = getContainer(self); local order = #self._elements + 1
+    local themes  = EcrinVeil:GetThemes()
+    local DISPLAY = { dark="Dark", midnight="Midnight", slate="Slate", ocean="Ocean", ember="Ember" }
+    local IH = 36; local MAX = #themes
+    local panel   = nil; local closing = false
 
     local sec = secFrame(cont, order)
-    registerThemeFrame(sec, "fill")
-    -- ThemePicker stacks rows vertically; secFrame doesn't add a layout by default.
-    ll(sec, Enum.FillDirection.Vertical, 0)
+    local row = rowFrame(sec, 1); crn(row, 10); pad(row, 0, 14, 0, 14)
+    registerThemeFrame(row, "fill")
 
-    local th = frm({ Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = C.fill,
-        BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 0 }, sec)
-    registerThemeFrame(th, "fill")
-    lbl({ Size = UDim2.new(1, -24, 1, 0), Position = UDim2.new(0, 14, 0, 0),
-        Text = T("theme_label"), TextColor3 = C.l1, TextSize = SZ.subhead, Font = F.semibold,
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, th)
-    frm({ Size = UDim2.new(1, 0, 0, 0.5), Position = UDim2.new(0, 0, 1, -0.5),
-        BackgroundColor3 = C.separator, BackgroundTransparency = 0, ZIndex = 15 }, th)
+    lbl({ Size = UDim2.new(0.5, 0, 1, 0), Position = UDim2.new(0, 14, 0, 0),
+        Text = T("theme_label"), TextColor3 = C.l1, TextSize = SZ.subhead, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 15 }, row)
 
-    local cards = {}
+    local function activeName()
+        return DISPLAY[EcrinVeil._activeTheme] or EcrinVeil._activeTheme or "—"
+    end
 
-    for i, themeName in ipairs(themes) do
-        local t        = THEMES[themeName]
-        local isAct    = EcrinVeil._activeTheme == themeName
-        local dispName = DISPLAY[themeName] or themeName
+    local vLbl = lbl({ Size = UDim2.new(0.42, -24, 1, 0), Position = UDim2.new(0.58, 0, 0, 0),
+        Text = activeName(), TextColor3 = C.l2, TextSize = SZ.caption1, Font = F.regular,
+        TextXAlignment = Enum.TextXAlignment.Right, ClipsDescendants = true, ZIndex = 15 }, row)
+    registerThemeFrame(vLbl, "l2")
 
-        local row2 = btn({
-            Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = isAct and C.fillSecond or C.fill,
-            BackgroundTransparency = 0, Text = "", ZIndex = 15, LayoutOrder = i,
-        }, sec)
-        crn(row2, 0)
-        local s = strk(row2, isAct and C.blue or C.separator, isAct and 1.5 or 0.5, isAct and 0 or 0.6)
+    local arrow = lbl({ Size = UDim2.new(0, 14, 1, 0), Position = UDim2.new(1, -14, 0, 0),
+        Text = "v", TextColor3 = C.l3, TextSize = 12, Font = F.bold, ZIndex = 15 }, row)
 
-        local swatchColors = { t.blue, t.green, t.orange, t.purple }
-        for j, sc in ipairs(swatchColors) do
-            local sw = frm({
-                Size = UDim2.new(0, 10, 0, 10), Position = UDim2.new(0, 14 + (j-1)*16, 0.5, -5),
-                BackgroundColor3 = sc, BackgroundTransparency = 0, ZIndex = 16,
-            }, row2); crn(sw, 5)
-        end
-
-        local nL = lbl({
-            Size = UDim2.new(1, -120, 1, 0), Position = UDim2.new(0, 82, 0, 0),
-            Text = dispName, TextColor3 = isAct and C.l1 or C.l2,
-            TextSize = SZ.subhead, Font = isAct and F.semibold or F.regular,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 16,
-        }, row2)
-
-        local ckL = lbl({
-            Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -28, 0, 0),
-            Text = isAct and "v" or "", TextColor3 = C.blue,
-            TextSize = SZ.caption1, Font = F.bold,
-            TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 16,
-        }, row2)
-
-        if i < #themes then
-            frm({ Size = UDim2.new(1, -28, 0, 0.5), Position = UDim2.new(0, 14, 1, -0.5),
-                BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 15 }, row2)
-        end
-
-        table.insert(cards, { row = row2, stroke = s, nameLbl = nL, checkLbl = ckL, name = themeName })
-
-        row2.MouseButton1Click:Connect(function()
-            EcrinVeil:SetTheme(themeName)
-            for _, cd in ipairs(cards) do
-                local active = (cd.name == themeName)
-                cd.row.BackgroundColor3    = active and C.fillSecond or C.fill
-                cd.stroke.Color            = active and C.blue or C.separator
-                cd.stroke.Thickness        = active and 1.5 or 0.5
-                cd.stroke.Transparency     = active and 0 or 0.6
-                cd.nameLbl.TextColor3      = active and C.l1 or C.l2
-                cd.nameLbl.Font            = active and F.semibold or F.regular
-                cd.checkLbl.Text           = active and "v" or ""
-            end
+    local function closePanel()
+        if not panel or closing then return end
+        closing = true
+        tw(arrow, eOut(0.15), { Rotation = 0 })
+        tw(panel, eIn(0.18), { Size = UDim2.new(1, 0, 0, 0) })
+        local p = panel; panel = nil
+        task.delay(0.19, function()
+            closing = false
+            if p and p.Parent then p:Destroy() end
         end)
     end
+
+    local function openPanel()
+        if panel or closing then return end
+        tw(arrow, eOut(0.15), { Rotation = 180 })
+        local totalH = IH * MAX + 8
+        panel = frm({ Size = UDim2.new(1, 0, 0, 0), Position = UDim2.new(0, 0, 0, ROW_H),
+            BackgroundColor3 = C.bgElevated, BackgroundTransparency = 0,
+            ClipsDescendants = true, ZIndex = 18, LayoutOrder = 2 }, sec)
+        crn(panel, 10); registerThemeFrame(panel, "bgElevated")
+
+        local lscroll = inst("ScrollingFrame", {
+            Size = UDim2.new(1, -22, 0, totalH - 8), Position = UDim2.new(0, 11, 0, 4),
+            BackgroundTransparency = 1, BorderSizePixel = 0,
+            ScrollBarThickness = 2, ScrollBarImageColor3 = C.separator,
+            ScrollingDirection = Enum.ScrollingDirection.Y,
+            CanvasSize = UDim2.new(0, 0, 0, 0), ZIndex = 19,
+        }, panel)
+        ll(lscroll, Enum.FillDirection.Vertical, 0)
+        lscroll.CanvasSize = UDim2.new(0, 0, 0, #themes * IH)
+
+        for i, themeName in ipairs(themes) do
+            local isAct = EcrinVeil._activeTheme == themeName
+            local dispName = DISPLAY[themeName] or themeName
+            local item = frm({
+                Size = UDim2.new(1, 0, 0, IH), LayoutOrder = i,
+                BackgroundColor3 = isAct and C.blue:Lerp(C.fill, 0.7) or C.bgElevated,
+                BackgroundTransparency = 0, ZIndex = 20,
+            }, lscroll)
+            lbl({ Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 12, 0, 0),
+                Text = dispName, TextColor3 = isAct and C.l1 or C.l2,
+                TextSize = SZ.subhead, Font = isAct and F.medium or F.regular,
+                TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 21 }, item)
+            if isAct then
+                lbl({ Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -20, 0, 0),
+                    Text = "v", TextColor3 = C.blue, TextSize = 12, Font = F.bold, ZIndex = 21 }, item)
+            end
+            if i > 1 then
+                frm({ Size = UDim2.new(1, -22, 0, 0.5), Position = UDim2.new(0, 11, 0, 0),
+                    BackgroundColor3 = C.separator, BackgroundTransparency = 0.5, ZIndex = 21 }, item)
+            end
+            local tn = themeName
+            btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 22 }, item).MouseButton1Click:Connect(function()
+                EcrinVeil:SetTheme(tn)
+                vLbl.Text = DISPLAY[tn] or tn
+                closePanel()
+            end)
+            local capturedAct = isAct
+            press(item, function() return capturedAct and C.blue:Lerp(C.fill, 0.7) or C.bgElevated end, "fillSecond", nil)
+        end
+
+        tw(panel, spr(0.35), { Size = UDim2.new(1, 0, 0, totalH) })
+    end
+
+    btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 16 }, row).MouseButton1Click:Connect(function()
+        if panel then closePanel() else openPanel() end
+    end)
 
     local elem = { type = "themepicker", frame = sec }
     applyCommonMethods(elem)
