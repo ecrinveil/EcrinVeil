@@ -15,7 +15,6 @@
 --     live theme-change while panel is open (known limitation, not worth the complexity).
 --   - Dropdown / ColorPicker panel close race condition tightened (flag + nil guard).
 --   - Added Tab:AddAccordion() — collapsible section with animated expand/collapse.
---   - All decorative block comments replaced with plain developer notes.
 --   - resolveText() guards against nil input.
 
 local EcrinVeil   = {}
