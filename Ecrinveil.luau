@@ -525,21 +525,25 @@ local function _buildCursorShape()
     if _cursorFrame then _cursorFrame:Destroy(); _cursorFrame = nil end
     local builder = CURSOR_SHAPES[_cursorShape] or CURSOR_SHAPES.heart
     _cursorFrame = builder(_cursorGui)
+    -- IgnoreGuiInset=false means the gui already lives in inset-adjusted space,
+    -- so GetMouseLocation (which returns raw screen coords) needs the inset
+    -- subtracted once here for the initial placement.
     local mp = UIS:GetMouseLocation()
-    -- GetMouseLocation already returns raw screen coords (no inset).
-    -- We account for inset in the InputChanged handler below.
-    _placeCursor(mp.X, mp.Y - GuiService:GetGuiInset().Y)
+    local insetY = GuiService:GetGuiInset().Y
+    _placeCursor(mp.X, mp.Y - insetY)
 end
 
 local function _buildCursorGui()
     if _cursorGui and _cursorGui.Parent then return end
-    local insetY = GuiService:GetGuiInset().Y
 
+    -- IgnoreGuiInset=false: Roblox shifts the gui down by the top-bar height
+    -- automatically, so inp.Position from InputChanged is already in the same
+    -- coordinate space as the gui — no manual subtraction needed there.
     _cursorGui = inst("ScreenGui", {
         Name           = "EV_Cursor",
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        IgnoreGuiInset = true,
+        IgnoreGuiInset = false,
         DisplayOrder   = 9999,
     }, plr.PlayerGui)
 
@@ -547,7 +551,7 @@ local function _buildCursorGui()
 
     _cursorConn = UIS.InputChanged:Connect(function(inp)
         if inp.UserInputType == Enum.UserInputType.MouseMovement then
-            _placeCursor(inp.Position.X, inp.Position.Y - insetY)
+            _placeCursor(inp.Position.X, inp.Position.Y)
         end
     end)
 end
