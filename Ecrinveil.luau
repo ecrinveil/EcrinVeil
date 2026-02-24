@@ -2377,6 +2377,8 @@ function Tab:AddAccordion(opts)
     local isOpen = opts.DefaultOpen == true
 
     local sec = secFrame(cont, order)
+    -- sec needs a vertical layout so hdr and contentWrap stack instead of overlap.
+    ll(sec, Enum.FillDirection.Vertical, 0)
 
     -- Header row (always visible, acts as the toggle button)
     local hdr = btn({
@@ -2402,7 +2404,9 @@ function Tab:AddAccordion(opts)
         BackgroundTransparency = 1,
     }, hdr)
 
-    -- Content container — clipped while animating, AutomaticSize when open
+    -- contentWrap clips the inner content while animating.
+    -- We drive its height manually — no AutomaticSize — so closing it to 0
+    -- actually collapses the space in the parent layout.
     local contentWrap = frm({
         Size = UDim2.new(1, 0, 0, 0),
         BackgroundTransparency = 1,
@@ -2410,27 +2414,31 @@ function Tab:AddAccordion(opts)
         ZIndex = 13, LayoutOrder = 2,
     }, sec)
 
+    -- contentInner holds the actual elements. AutomaticSize is intentionally
+    -- NOT set here; we read AbsoluteContentSize from the layout and apply it
+    -- to contentWrap ourselves so the parent layout sees the correct height.
     local contentInner = frm({
         Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
         ZIndex = 13,
     }, contentWrap)
     pad(contentInner, 4, 0, 4, 0)
     local innerLayout = ll(contentInner, Enum.FillDirection.Vertical, 8)
 
-    -- innerTab is a lightweight proxy so callers can use the same Tab:Add* API
-    -- inside an accordion without needing a real Tab object.
     local innerTab = setmetatable({
-        _win      = self._win,
-        _elements = {},
-        _panels   = self._panels, -- share parent panel list for cleanup
+        _win       = self._win,
+        _elements  = {},
+        _panels    = self._panels,
         _container = contentInner,
     }, Tab)
 
-    -- Measure the natural height of the inner content.
     local function getContentHeight()
         return innerLayout.AbsoluteContentSize.Y + 8
+    end
+
+    local function applyHeight(h)
+        contentInner.Size = UDim2.new(1, 0, 0, h)
+        contentWrap.Size  = UDim2.new(1, 0, 0, h)
     end
 
     local function setOpen(open, animate)
@@ -2438,39 +2446,35 @@ function Tab:AddAccordion(opts)
         local targetH = open and getContentHeight() or 0
         tw(chevron, eOut(0.2), { Rotation = open and 180 or 0 })
         if animate then
-            tw(contentWrap, eOut(0.22), { Size = UDim2.new(1, 0, 0, targetH) })
+            -- Tween both wrappers together so there's no gap left behind.
+            TS:Create(contentWrap,  eOut(0.22), { Size = UDim2.new(1, 0, 0, targetH) }):Play()
+            TS:Create(contentInner, eOut(0.22), { Size = UDim2.new(1, 0, 0, targetH) }):Play()
         else
-            contentWrap.Size = UDim2.new(1, 0, 0, targetH)
+            applyHeight(targetH)
         end
     end
 
-    -- Re-measure whenever inner content changes (elements added after initial build)
+    -- When elements are added after initial build, resize if already open.
     innerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        if isOpen then
-            contentWrap.Size = UDim2.new(1, 0, 0, getContentHeight())
-        end
+        if isOpen then applyHeight(getContentHeight()) end
     end)
 
     press(hdr, "fill", "fillSecond", nil)
     hdr.MouseButton1Click:Connect(function() setOpen(not isOpen, true) end)
 
-    -- Apply initial state without animation
     setOpen(isOpen, false)
 
     local elem = {
-        type    = "accordion",
-        frame   = sec,
-        _inner  = innerTab,
-        IsOpen  = isOpen,
+        type   = "accordion",
+        frame  = sec,
+        _inner = innerTab,
+        IsOpen = isOpen,
     }
 
-    function elem:Add(buildFn)
-        buildFn(self._inner)
-    end
-
-    function elem:Open()  setOpen(true,  true) end
-    function elem:Close() setOpen(false, true) end
-    function elem:Toggle() setOpen(not isOpen, true) end
+    function elem:Add(buildFn) buildFn(self._inner) end
+    function elem:Open()       setOpen(true,      true) end
+    function elem:Close()      setOpen(false,     true) end
+    function elem:Toggle()     setOpen(not isOpen, true) end
 
     applyCommonMethods(elem)
     table.insert(self._elements, elem)
@@ -2489,6 +2493,8 @@ function Tab:AddThemePicker(opts)
 
     local sec = secFrame(cont, order)
     registerThemeFrame(sec, "fill")
+    -- ThemePicker stacks rows vertically; secFrame doesn't add a layout by default.
+    ll(sec, Enum.FillDirection.Vertical, 0)
 
     local th = frm({ Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = C.fill,
         BackgroundTransparency = 0, ZIndex = 14, LayoutOrder = 0 }, sec)
