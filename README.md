@@ -1,5 +1,7 @@
 # EcrinVeil
 
+### Important: This UI is right now bugged. Please do not use it.
+
 **iOS 17 Dark Mode inspired UI library for Roblox exploits.**  
 Clean, animated, multi-language, theme-aware. No external dependencies.
 
