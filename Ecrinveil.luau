@@ -1,38 +1,28 @@
--- EcrinVeil — iOS-Native UI Library v2.5
+-- EcrinVeil — iOS-Native UI Library v2.6
 -- Roblox / iOS 17 Dark Mode / SF Pro-style fonts
 --
--- Changelog v2.5:
---   - Cursor hotspot fix: shape offset corrected so the click point
---     matches the visual tip/center of each cursor shape.
---   - press() now accepts Color3 directly, as a C-key string, or as a function.
---     Colored buttons (opts.Color) register a theme callback so they repaint on theme change.
---   - AddTable: isSel closure was stale after rebuild — now re-evaluated per build pass.
---   - AddDropdown: vcSel capture leak fixed, closure rebuilt each buildList call.
---   - SaveManager Load: KeyCode values stored as plain name string, restored correctly.
---   - _themeFrames / _themeCallbacks: dead-ref pruning now runs on every SetTheme
---     call and also on window Destroy, preventing unbounded growth.
---   - ColorPicker preset swatches now pull from C at open-time; added a note about
---     live theme-change while panel is open (known limitation, not worth the complexity).
---   - Dropdown / ColorPicker panel close race condition tightened (flag + nil guard).
---   - Added Tab:AddAccordion() — collapsible section with animated expand/collapse.
---   - resolveText() guards against nil input.
+-- Changelog v2.6:
+--   - Tab:SetBadge() removed.
+--   - Heart cursor rebuilt as a proper red-pink heart shape (two bumps + diamond).
+--   - SetTheme: _themeFrames and callbacks now run once per call, not twice.
+--     (pruneThemeRefs was re-running all callbacks — split into pruneThemeRefs +
+--      runThemeCallbacks to fix the double-fire bug.)
+--   - SetTheme: Notify toast repaint fixed (was using stale color-comparison heuristic).
+--   - _SetupDrag / _SetupInput: connections stored on Window, disconnected in Destroy.
+--   - PlayerTable: PlayerAdded/PlayerRemoving connections now disconnected immediately
+--     when the panel closes (previously leaked for up to 60 s).
+--   - ColorPicker: panel auto-closes on theme change so preset swatches are always fresh.
+--   - _ApplyTheme: header separator line, sidebar divider, scrollbar colors now updated.
+--   - AddSlider vLbl, AddInput border+placeholder, AddStatusRow vLbl, AddKeybind
+--     badge/dot: all registered for theme repaint.
 
-local EcrinVeil   = {}
-EcrinVeil.__index = EcrinVeil
-EcrinVeil.Version = "2.5.0"
-EcrinVeil.Options = {}
-
-local Players    = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UIS        = game:GetService("UserInputService")
-local TS         = game:GetService("TweenService")
-local GuiService = game:GetService("GuiService")
-local plr        = Players.LocalPlayer
-
--- Language system
-EcrinVeil._lang            = "en"
-EcrinVeil._labelRefs       = {}
-EcrinVeil._registeredLangs = {}
+local EcrinVeil={};Ecrin        Veil.__index=Ecr        inVeil;EcrinVeil.Ver            sion="2.6.0"        ;Ecr                inVe    il.O                    ptio        ns={};;;;;;;;;;;            ;;;;;;;;;;;;        ;;;;            
+loca                        l Pl                ayer    s=ga                me:G            etSe            rvice("P            laye    rs")                    ;;;;    ;;;;                ;;;;            ;;;;            ;;;;            
+loca                        l Ru                        nSer                vice            =gam            e:Ge    tSer        vice        ("Ru            nSer        vice                ");;            ;;;;            ;;;;            
+local UIS=game:G            etSe                        rvice("UserInputServ                ice"            );lo        cal     TS=g        ame:            GetS        ervice("TweenService");;            ;;;;            ;;;;            
+loca                        l Gu                        iSer    vice                        =gam            e:Ge            tService            ("Gu    iSer            vice                                ");;            ;;;;            
+loca                        l pl                r=Pl    ayer        s.Lo                    calP            laye                r;Ec            rinV    eil.            _lan                g="e            n";;            ;;;;            
+EcrinVeil._labelRefs={};        EcrinVeil._regis        tere            dLan            gs={};;;;;;;        ;;;;                ;;;;                ;;;;                    ;;;;;;;;;;;;;;;;            ;;;;;;;;;;;;        ;;;;;;;;;;;;;;;;
 
 local function resolveText(val)
     if val == nil then return "" end
@@ -270,7 +260,8 @@ local function registerThemeCallback(fn)
 end
 
 local function pruneThemeRefs()
-    -- Runs on every SetTheme and on window Destroy to avoid unbounded growth.
+    -- Only removes dead frame refs. Does NOT run callbacks (that would double-fire
+    -- when called from SetTheme which already ran them).
     local dead = {}
     for i, ref in ipairs(_themeFrames) do
         if not (ref.frame and ref.frame.Parent) then
@@ -278,7 +269,10 @@ local function pruneThemeRefs()
         end
     end
     for i = #dead, 1, -1 do table.remove(_themeFrames, dead[i]) end
+end
 
+local function runThemeCallbacks()
+    -- Runs all registered callbacks and removes any that error (dead closures).
     local deadCb = {}
     for i, fn in ipairs(_themeCallbacks) do
         local ok = pcall(fn)
@@ -313,12 +307,37 @@ function EcrinVeil:SetTheme(themeName)
     end
     for i = #dead, 1, -1 do table.remove(_themeFrames, dead[i]) end
 
-    -- pruneThemeRefs also re-runs all callbacks
+    -- Run callbacks (toggle/color updates), then prune any dead refs.
+    runThemeCallbacks()
     pruneThemeRefs()
 
     for _, win in ipairs(self._windows) do
         if win and win._gui and win._gui.Parent then
             pcall(function() win:_ApplyTheme() end)
+        end
+    end
+
+    -- Repaint any live Notify toasts.
+    -- Toast structure: pill (Frame) > accentDot, title label (ZIndex 101, TextColor3=l1/l2).
+    local notifyGui = plr.PlayerGui:FindFirstChild("EV_Notify")
+    if notifyGui then
+        for _, pill in ipairs(notifyGui:GetChildren()) do
+            if pill:IsA("Frame") then
+                pcall(function()
+                    pill.BackgroundColor3 = C.bgElevated
+                    for _, ch in ipairs(pill:GetChildren()) do
+                        if ch:IsA("TextLabel") then
+                            -- Title label sits at ZIndex 101; sub-content at same level.
+                            -- Repaint all text to l1 (title) or l2 (content) based on font.
+                            if ch.Font == Enum.Font.GothamSemibold then
+                                ch.TextColor3 = C.l1
+                            else
+                                ch.TextColor3 = C.l2
+                            end
+                        end
+                    end
+                end)
+            end
         end
     end
 end
@@ -457,7 +476,7 @@ local _cursorShape  = "heart"
 -- Hotspot offsets per shape: {x, y} in pixels from frame top-left.
 -- This is what gets subtracted so the visual tip lines up with the real click.
 local CURSOR_HOTSPOT = {
-    heart  = { x = 9,  y = 9  }, -- center of the heart
+    heart  = { x = 10, y = 9  }, -- centre of the two-bump row
     dot    = { x = 7,  y = 7  }, -- center of the circle
     ring   = { x = 8,  y = 8  }, -- center of the ring
     cross  = { x = 8,  y = 8  }, -- intersection
@@ -466,17 +485,26 @@ local CURSOR_HOTSPOT = {
 
 local CURSOR_SHAPES = {
     heart = function(parent)
-        local SIZE = 18
-        local root = frm({ Size = UDim2.new(0, SIZE, 0, SIZE), BackgroundTransparency = 1, ZIndex = 9999 }, parent)
-        local l = frm({ Size = UDim2.new(0,12,0,12), Position = UDim2.new(0,0,0,0),
-            BackgroundColor3 = Color3.new(1,1,1), BackgroundTransparency = 0, ZIndex = 9999 }, root)
-        crn(l, 6); strk(l, Color3.new(0,0,0), 1, 0)
-        local r = frm({ Size = UDim2.new(0,12,0,12), Position = UDim2.new(0,6,0,0),
-            BackgroundColor3 = Color3.new(1,1,1), BackgroundTransparency = 0, ZIndex = 9999 }, root)
-        crn(r, 6); strk(r, Color3.new(0,0,0), 1, 0)
-        local b = frm({ Size = UDim2.new(0,13,0,13), Position = UDim2.new(0,2.5,0,6),
-            BackgroundColor3 = Color3.new(1,1,1), BackgroundTransparency = 0, Rotation = 45, ZIndex = 9998 }, root)
-        strk(b, Color3.new(0,0,0), 1, 0)
+        -- Real heart: two overlapping circles on top, rotated square pointing down.
+        -- Total bounding box ~20x18 px. Hot spot = centre of the two bumps row (~x=10,y=9).
+        local W, H = 20, 18
+        local root = frm({ Size = UDim2.new(0, W, 0, H), BackgroundTransparency = 1, ZIndex = 9999 }, parent)
+        local col = Color3.new(1, 0.15, 0.25)  -- red-pink heart
+        -- Left bump
+        local lb = frm({ Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(0, 0, 0, 0),
+            BackgroundColor3 = col, BackgroundTransparency = 0, ZIndex = 9999 }, root)
+        crn(lb, 6); strk(lb, Color3.new(0,0,0), 0.8, 0.5)
+        -- Right bump
+        local rb = frm({ Size = UDim2.new(0, 12, 0, 12), Position = UDim2.new(0, 8, 0, 0),
+            BackgroundColor3 = col, BackgroundTransparency = 0, ZIndex = 9999 }, root)
+        crn(rb, 6); strk(rb, Color3.new(0,0,0), 0.8, 0.5)
+        -- Bottom diamond (rotated square) — sits behind bumps so overlap is smooth
+        local dm = frm({ Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(0, 3, 0, 5),
+            BackgroundColor3 = col, BackgroundTransparency = 0, Rotation = 45, ZIndex = 9998 }, root)
+        strk(dm, Color3.new(0,0,0), 0.8, 0.5)
+        -- Small fill strip to cover the gap between bumps and diamond at the top-centre
+        local mid = frm({ Size = UDim2.new(0, 8, 0, 8), Position = UDim2.new(0, 6, 0, 2),
+            BackgroundColor3 = col, BackgroundTransparency = 0, ZIndex = 9998 }, root)
         return root
     end,
     dot = function(parent)
@@ -608,9 +636,9 @@ end
 
 function EcrinVeil:Notify(opts)
     opts = opts or {}
-    local title   = opts.Title
-    local content = opts.Content or ""
-    local sub     = opts.SubContent
+    local title   = resolveText(opts.Title)
+    local content = resolveText(opts.Content or "")
+    local sub     = opts.SubContent and resolveText(opts.SubContent) or nil
     local dur     = opts.Duration or 4
     local kind    = opts.Kind or "info"
     local accent  = ({ info = C.blue, success = C.green, warn = C.orange, error = C.red })[kind] or C.blue
@@ -940,11 +968,25 @@ function Window:_ApplyTheme()
             if ch:IsA("Frame") and ch.Size.Y.Offset > 1 then
                 ch.BackgroundColor3 = t.bgElevated
             end
+            -- separator line at bottom of header (Size.Y.Offset == 0.5)
+            if ch:IsA("Frame") and ch.Size.Y.Offset <= 1 then
+                ch.BackgroundColor3 = t.separator
+            end
         end
     end
     if self._titleLbl then self._titleLbl.TextColor3 = t.l1 end
     if self._subLbl   then self._subLbl.TextColor3   = t.l2 end
-    if self._sidebar  then self._sidebar.BackgroundColor3 = t.bgTertiary end
+    if self._sidebar  then
+        self._sidebar.BackgroundColor3 = t.bgTertiary
+        -- sidebar right-edge divider
+        for _, ch in ipairs(self._sidebar:GetChildren()) do
+            if ch:IsA("Frame") and ch.Size.X.Offset <= 1 then
+                ch.BackgroundColor3 = t.separator
+            end
+        end
+    end
+    if self._tabList      then self._tabList.ScrollBarImageColor3     = t.separator end
+    if self._contentArea  then self._contentArea.ScrollBarImageColor3 = t.separator end
     for _, tab in ipairs(self._tabs) do
         pcall(function() tab:_RefreshTheme() end)
     end
@@ -952,13 +994,15 @@ end
 
 function Window:_SetupDrag()
     local drag, ds, sp = false, nil, nil
-    self._header.InputBegan:Connect(function(i)
+    -- Store these connections so Destroy() can clean them up.
+    self._dragConns = self._dragConns or {}
+    table.insert(self._dragConns, self._header.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then
             drag = true; ds = i.Position; sp = self._win.Position
         end
-    end)
-    UIS.InputChanged:Connect(function(i)
+    end))
+    table.insert(self._dragConns, UIS.InputChanged:Connect(function(i)
         if not drag then return end
         if i.UserInputType == Enum.UserInputType.MouseMovement
         or i.UserInputType == Enum.UserInputType.Touch then
@@ -966,17 +1010,17 @@ function Window:_SetupDrag()
             self._win.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
             self._winEndPos    = self._win.Position
         end
-    end)
-    UIS.InputEnded:Connect(function(i)
+    end))
+    table.insert(self._dragConns, UIS.InputEnded:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then drag = false end
-    end)
+    end))
 end
 
 EcrinVeil._listeningKeybind = 0
 
 function Window:_SetupInput()
-    UIS.InputBegan:Connect(function(i, gp)
+    self._inputConn = UIS.InputBegan:Connect(function(i, gp)
         if gp then return end
         if EcrinVeil._listeningKeybind > 0 then return end
         if i.KeyCode == self._minimizeKey then self:Toggle() end
@@ -1042,6 +1086,15 @@ end
 function Window:Destroy()
     for i, w in ipairs(EcrinVeil._windows) do
         if w == self then table.remove(EcrinVeil._windows, i); break end
+    end
+    -- Disconnect drag and minimize-key listeners so they don't linger.
+    if self._dragConns then
+        for _, c in ipairs(self._dragConns) do pcall(function() c:Disconnect() end) end
+        self._dragConns = {}
+    end
+    if self._inputConn then
+        pcall(function() self._inputConn:Disconnect() end)
+        self._inputConn = nil
     end
     pruneThemeRefs()
     _hideCustomCursor()
@@ -1147,25 +1200,6 @@ function Tab:_ShowContent()
     self._container.Visible = true
 end
 
-function Tab:SetBadge(n)
-    if n and n > 0 then
-        if not self._badge then
-            self._badge = frm({
-                Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(1, -4, 0, 4),
-                BackgroundColor3 = C.red, BackgroundTransparency = 0, ZIndex = 16,
-            }, self._btn)
-            crn(self._badge, 9)
-            self._badgeLbl = lbl({
-                Size = UDim2.new(1, 0, 1, 0), TextColor3 = C.l1,
-                TextSize = SZ.caption2, Font = F.bold,
-                TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 17,
-            }, self._badge)
-        end
-        self._badge.Visible = true; self._badgeLbl.Text = tostring(n)
-    elseif self._badge then
-        self._badge.Visible = false
-    end
-end
 
 function Tab:SetEnabled(enabled)
     self._enabled = enabled
@@ -1311,6 +1345,7 @@ function Tab:AddStatusRow(opts)
         TextSize = SZ.subhead, Font = F.regular,
         TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 15,
     }, row)
+    if not opts.Color then registerThemeFrame(vl, "l2", "TextColor3") end
     local elem = { type = "status", frame = sec, _lbl = vl }
     function elem:SetValue(v, col) vl.Text = tostring(v); if col then vl.TextColor3 = col end end
     applyCommonMethods(elem)
@@ -1455,8 +1490,7 @@ function Tab:AddSlider(id, opts)
         TextColor3 = C.blue, TextSize = SZ.subhead, Font = F.medium,
         TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 15,
     }, row)
-
-    if opts.Description then
+    registerThemeFrame(vLbl, "blue", "TextColor3")
         local dL = lbl({
             Size = UDim2.new(1, 0, 0, 14), Position = UDim2.new(0, 0, 0, 22),
             Text = resolveText(opts.Description), TextColor3 = C.l2,
@@ -1583,8 +1617,10 @@ function Tab:AddInput(id, opts)
         Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0, 43),
         BackgroundColor3 = C.separator, BackgroundTransparency = 0, ZIndex = 14,
     }, row)
-
-    box.Focused:Connect(function() tw(border, eOut(0.18), { BackgroundColor3 = C.blue }) end)
+    registerThemeFrame(border, "separator")
+    registerThemeCallback(function()
+        if box and box.Parent then box.PlaceholderColor3 = C.l3 end
+    end) tw(border, eOut(0.18), { BackgroundColor3 = C.blue }) end)
     box.FocusLost:Connect(function(enter)
         tw(border, eOut(0.18), { BackgroundColor3 = C.separator }); val = box.Text
         if opts.Finished then if enter then cb(val) end else cb(val) end
@@ -1796,8 +1832,8 @@ function Tab:AddKeybind(id, opts)
         BackgroundColor3 = C.fill, BackgroundTransparency = 0, ZIndex = 15,
     }, row)
     crn(badge, 6); strk(badge, C.separator, 0.5, 0)
-
-    local kLbl = lbl({
+    registerThemeFrame(badge, "fill")
+    registerThemeFrame(kLbl, "l1", "TextColor3")
         Size = UDim2.new(1, 0, 1, 0), Text = curKey.Name, TextColor3 = C.l1,
         TextSize = SZ.caption1, Font = F.medium,
         TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 16,
@@ -1808,8 +1844,9 @@ function Tab:AddKeybind(id, opts)
         BackgroundColor3 = C.l4, BackgroundTransparency = 0, ZIndex = 15,
     }, row)
     crn(dot, 4)
-
-    local function setListening(v)
+    registerThemeCallback(function()
+        if dot and dot.Parent and not state then dot.BackgroundColor3 = C.l4 end
+    end)
         listening = v
         if v then
             EcrinVeil._listeningKeybind = EcrinVeil._listeningKeybind + 1
@@ -1954,9 +1991,14 @@ function Tab:AddPlayerTable(opts)
     local arrow = lbl({ Size = UDim2.new(0, 14, 1, 0), Position = UDim2.new(1, -14, 0, 0),
         Text = "v", TextColor3 = C.l3, TextSize = 12, Font = F.bold, ZIndex = 15 }, row)
 
+    local _playerConns = {}
+
     local function closePanel()
         if not panel or closing then return end
         closing = true
+        -- Disconnect player join/leave listeners immediately on close.
+        for _, c in ipairs(_playerConns) do pcall(function() c:Disconnect() end) end
+        _playerConns = {}
         tw(arrow, eOut(0.15), { Rotation = 0 })
         tw(panel, eIn(0.18), { Size = UDim2.new(1, 0, 0, 0) })
         local p = panel; panel = nil
@@ -1965,8 +2007,6 @@ function Tab:AddPlayerTable(opts)
             if p and p.Parent then p:Destroy() end
         end)
     end
-
-    local function buildList(ls, sbox)
         local filter = sbox and sbox.Text or ""
         for _, c in ipairs(ls:GetChildren()) do
             if c:IsA("Frame") then c:Destroy() end
@@ -2075,14 +2115,14 @@ function Tab:AddPlayerTable(opts)
         sbox:GetPropertyChangedSignal("Text"):Connect(function() buildList(ls, sbox) end)
         tw(panel, spr(0.35), { Size = UDim2.new(1, 0, 0, initH) })
 
-        -- Auto-refresh when players join/leave while panel is open
-        local pa = Players.PlayerAdded:Connect(function()
+        -- Auto-refresh when players join/leave while panel is open.
+        -- Stored in _playerConns so closePanel() can disconnect them immediately.
+        table.insert(_playerConns, Players.PlayerAdded:Connect(function()
             if panel then buildList(ls, sbox) end
-        end)
-        local pr = Players.PlayerRemoving:Connect(function()
+        end))
+        table.insert(_playerConns, Players.PlayerRemoving:Connect(function()
             if panel then task.defer(function() buildList(ls, sbox) end) end
-        end)
-        task.delay(60, function() pa:Disconnect(); pr:Disconnect() end)
+        end))
     end
 
     btn({ Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 16 }, row).MouseButton1Click:Connect(function()
@@ -2306,6 +2346,17 @@ function Tab:AddColorpicker(id, opts)
             ClipsDescendants = true, ZIndex = 18, LayoutOrder = 2,
         }, sec); crn(panel, 10)
         registerThemeFrame(panel, "bgElevated")
+
+        -- Close the panel automatically when the theme changes while it is open.
+        -- The callback checks the panel reference each call; once the panel is gone
+        -- it becomes a no-op and pruneThemeRefs will eventually collect it.
+        local _themeCloseRegistered = true
+        registerThemeCallback(function()
+            if _themeCloseRegistered and panel and panel.Parent then
+                _themeCloseRegistered = false
+                closePanel()
+            end
+        end)
 
         local function colorToHex(c)
             return string.format("%02X%02X%02X",
