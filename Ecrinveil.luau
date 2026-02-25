@@ -16,13 +16,22 @@
 --   - AddSlider vLbl, AddInput border+placeholder, AddStatusRow vLbl, AddKeybind
 --     badge/dot: all registered for theme repaint.
 
-local EcrinVeil={};Ecrin        Veil.__index=Ecr        inVeil;EcrinVeil.Ver            sion="2.6.0"        ;Ecr                inVe    il.O                    ptio        ns={};;;;;;;;;;;            ;;;;;;;;;;;;        ;;;;            
-loca                        l Pl                ayer    s=ga                me:G            etSe            rvice("P            laye    rs")                    ;;;;    ;;;;                ;;;;            ;;;;            ;;;;            
-loca                        l Ru                        nSer                vice            =gam            e:Ge    tSer        vice        ("Ru            nSer        vice                ");;            ;;;;            ;;;;            
-local UIS=game:G            etSe                        rvice("UserInputServ                ice"            );lo        cal     TS=g        ame:            GetS        ervice("TweenService");;            ;;;;            ;;;;            
-loca                        l Gu                        iSer    vice                        =gam            e:Ge            tService            ("Gu    iSer            vice                                ");;            ;;;;            
-loca                        l pl                r=Pl    ayer        s.Lo                    calP            laye                r;Ec            rinV    eil.            _lan                g="e            n";;            ;;;;            
-EcrinVeil._labelRefs={};        EcrinVeil._regis        tere            dLan            gs={};;;;;;;        ;;;;                ;;;;                ;;;;                    ;;;;;;;;;;;;;;;;            ;;;;;;;;;;;;        ;;;;;;;;;;;;;;;;
+local EcrinVeil   = {}
+EcrinVeil.__index = EcrinVeil
+EcrinVeil.Version = "2.6.0"
+EcrinVeil.Options = {}
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+local TS         = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
+local plr        = Players.LocalPlayer
+
+-- Language system
+EcrinVeil._lang            = "en"
+EcrinVeil._labelRefs       = {}
+EcrinVeil._registeredLangs = {}
 
 local function resolveText(val)
     if val == nil then return "" end
